@@ -1,20 +1,24 @@
 import SwiftUI
 
 struct ContentView: View {
+    @EnvironmentObject private var lang: Lang
     @StateObject private var model = BlockerModel()
 
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
-            HStack(spacing: 12) {
+            HStack(alignment: .top, spacing: 12) {
                 Image(nsImage: NSApp.applicationIconImage)
                     .resizable()
                     .frame(width: 56, height: 56)
                 VStack(alignment: .leading, spacing: 3) {
-                    Text("Safari Ad Blocker").font(.title2.bold())
-                    Text("Three Safari content blockers plus a video ad skipper. Each one can be turned on or off in Safari settings.")
+                    Text(lang.t("app.title")).font(.title2.bold())
+                    Text(lang.t("app.subtitle"))
                         .font(.callout)
                         .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
+                Spacer()
+                LanguagePicker()
             }
 
             VStack(spacing: 0) {
@@ -33,12 +37,12 @@ struct ContentView: View {
             HelpBox(signed: model.isSigned)
 
             HStack {
-                Button("Open Safari Extension Settings") { model.openSafariSettings() }
-                Button("Check It Works (Test Site)") { model.openCheckPage() }
-                Button("Reload Rules") { model.reloadAll() }
+                Button(lang.t("button.openSettings")) { model.openSafariSettings() }
+                Button(lang.t("button.check")) { model.openCheckPage() }
+                Button(lang.t("button.reload")) { model.reloadAll() }
                     .disabled(model.busy)
                 Spacer()
-                Button("Refresh Status") { model.refresh() }
+                Button(lang.t("button.refresh")) { model.refresh() }
             }
 
             if !model.message.isEmpty {
@@ -50,8 +54,9 @@ struct ContentView: View {
             }
         }
         .padding(20)
-        .frame(width: 620)
+        .frame(width: 640)
         .onAppear {
+            model.lang = lang
             // When install.sh launches the app with `--reload`, push the new rules to Safari right away.
             if CommandLine.arguments.contains("--reload") { model.reloadAll() } else { model.refresh() }
         }
@@ -61,7 +66,30 @@ struct ContentView: View {
     }
 }
 
+struct LanguagePicker: View {
+    @EnvironmentObject private var lang: Lang
+
+    var body: some View {
+        VStack(alignment: .trailing, spacing: 4) {
+            Picker(lang.t("language.label"), selection: $lang.selection) {
+                Text(lang.t("language.system")).tag(Lang.systemCode)
+                ForEach(Lang.supported, id: \.code) { item in
+                    Text(item.name).tag(item.code)
+                }
+            }
+            .pickerStyle(.menu)
+            .fixedSize()
+            Text(lang.t("language.note"))
+                .font(.caption2)
+                .foregroundStyle(.tertiary)
+                .multilineTextAlignment(.trailing)
+                .frame(maxWidth: 220, alignment: .trailing)
+        }
+    }
+}
+
 struct BlockerRow: View {
+    @EnvironmentObject private var lang: Lang
     let blocker: BlockerInfo
     let state: BlockerState
     let meta: RuleMeta?
@@ -75,31 +103,31 @@ struct BlockerRow: View {
                 .padding(.top, 5)
             VStack(alignment: .leading, spacing: 3) {
                 HStack(spacing: 8) {
-                    Text(blocker.title).font(.headline)
+                    Text(lang.t("ext.\(blocker.folder).name")).font(.headline)
                     Text(stateText).font(.caption).foregroundStyle(color)
                 }
-                Text(blocker.detail)
+                Text(lang.t("ext.\(blocker.folder).detail"))
                     .font(.callout)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
                 if let meta = meta {
-                    Text("\(meta.rules.formatted()) rules · lists updated \(meta.generated)")
+                    Text(lang.t("meta.rules", ["count": meta.rules.formatted(), "date": meta.generated]))
                         .font(.caption)
                         .foregroundStyle(.tertiary)
                 }
             }
             Spacer()
-            Button("Set Up in Safari", action: open)
+            Button(lang.t("button.setup"), action: open)
         }
         .padding(12)
     }
 
     private var stateText: String {
         switch state {
-        case .unknown: return "Checking…"
-        case .enabled: return "On"
-        case .disabled: return "Off — turn it on in Safari"
-        case .missing(let why): return "Not recognized by Safari (\(why))"
+        case .unknown: return lang.t("state.checking")
+        case .enabled: return lang.t("state.on")
+        case .disabled: return lang.t("state.off")
+        case .missing(let why): return lang.t("state.missing", ["error": why])
         }
     }
 
@@ -114,20 +142,20 @@ struct BlockerRow: View {
 }
 
 struct HelpBox: View {
+    @EnvironmentObject private var lang: Lang
     let signed: Bool
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("How to use").font(.headline)
-            step("1.circle", "Turn on the four items in Safari › Settings › Extensions. The button below opens that screen.")
-            step("person.2.circle", "If you use Safari profiles (a profile icon at the left of the tab bar), each profile must be turned on separately: Safari › Settings › Profiles › the profile › Extensions tab. The ‘On’ shown here refers to the default profile.")
-            step("2.circle", "To turn blocking off for one site only, open that site and choose Safari menu › ‘Settings for <site>…’ › uncheck ‘Enable content blockers’.")
-            step("3.circle", "The ‘Check It Works’ button opens a test site so you can confirm blocking is active. Pages that were already open must be reloaded after enabling.")
-            step("4.circle", "To update the block lists, run ./update-rules.sh in the project folder and then ./install.sh.")
-            step("info.circle", "Video ads cannot be blocked by content blockers, so ‘Video Ad Skipper’ ends them inside the page instead. It may stop working for a while when the site changes its structure.")
+            Text(lang.t("help.title")).font(.headline)
+            step("1.circle", lang.t("help.step1"))
+            step("person.2.circle", lang.t("help.profiles"))
+            step("2.circle", lang.t("help.step2"))
+            step("3.circle", lang.t("help.step3"))
+            step("4.circle", lang.t("help.step4"))
+            step("info.circle", lang.t("help.video"))
             if !signed {
-                step("exclamationmark.triangle.fill",
-                     "This build is signed ad hoc (no certificate). Turn on Safari › Settings › Advanced › ‘Show features for web developers’, then Develop › Developer Settings… › ‘Allow unsigned extensions’ for the extensions to appear. Safari resets that setting when it quits, so sign with an Apple Development certificate for regular use (see README).")
+                step("exclamationmark.triangle.fill", lang.t("help.unsigned"))
                     .foregroundStyle(.orange)
             }
         }

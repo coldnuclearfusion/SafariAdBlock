@@ -1,5 +1,7 @@
 # SafariAdBlock
 
+**English** · [한국어](README.ko.md) · [日本語](README.ja.md) · [中文（简体）](README.zh-Hans.md)
+
 An ad-blocking extension set for Safari. It uses Safari's native **content blocker** mechanism, so it is fast and needs no permission to read page contents. EasyList, EasyPrivacy and Korean lists (List-KR, YousList) are converted into Safari rules.
 
 | Extension | Source | What it does |
@@ -9,7 +11,7 @@ An ad-blocking extension set for Safari. It uses Safari's native **content block
 | **Korean Sites Ad Blocking** | List-KR (filterslist-KO) + YousList | Rules specific to Korean sites such as Naver and Daum |
 | **Video Ad Skipper** | `WebExtension/` (Safari web extension) | Keeps pre-roll and mid-roll video ads from starting, skips any that still appear, dismisses ad-blocker warnings |
 
-Each of the four can be turned on and off separately in Safari settings. The first three are content blockers (URL and CSS rules only, no code runs in pages); the fourth is a web extension that runs a script inside the video site's pages. The container app (SafariAdBlock.app) shows the status of each extension, opens Safari settings and reloads the rules.
+Each of the four can be turned on and off separately in Safari settings. The first three are content blockers (URL and CSS rules only, no code runs in pages); the fourth is a web extension that runs a script inside the video site's pages. The container app (SafariAdBlock.app) shows the status of each extension, opens Safari settings and reloads the rules. The app and the extension names are available in English, Korean, Japanese and Simplified Chinese.
 
 ## Build and install
 
@@ -47,9 +49,18 @@ cd SafariAdBlock && ./install.sh
 
 The first build downloads the filter lists. If that Mac has no Apple Development certificate, the build is signed ad hoc; see the signing section above.
 
+## Languages
+
+The app UI is available in English, Korean, Japanese and Simplified Chinese. It follows the system language by default; the **Language** menu at the top right of the app switches it immediately and remembers the choice. Languages other than these fall back to English.
+
+The extension names shown inside Safari's own settings (and the app name in Finder) come from the bundles' `InfoPlist.strings` and the web extension's `_locales`, so they always follow the **system** language, not the app's language menu.
+
+To add or change strings, edit `Resources/App/Localizations/<code>.json` (all four files must have the same keys; `build.sh` checks this) and, for the web extension's name and description, `WebExtension/_locales/<code>/messages.json`.
+
 ## Usage
 
 - **Turn blocking off for one site**: open the site, then Safari menu › **Settings for <site>…** › uncheck **Enable content blockers**. Safari remembers it per site.
+- **Change the language**: the Language menu at the top right of the app (System / 한국어 / English / 日本語 / 中文).
 - **Update the block lists** (EasyList and friends update every few days):
   ```bash
   ./update-rules.sh && ./install.sh
@@ -89,11 +100,11 @@ filters/sources/*.txt ─▶ tools/convert.py ─▶ rules/<ext>.json ─▶ <ex
 ## Layout
 
 ```
-Sources/App/               container app (SwiftUI): status, open Safari settings, reload rules
+Sources/App/               container app (SwiftUI): status, open Safari settings, reload rules, language menu
 Sources/ContentBlocker/    content blocker entry point (shared by the three blockers)
 Sources/WebExtension/      native side of the Video Ad Skipper web extension (minimal)
-WebExtension/              manifest.json, main.js (strips ads from responses), content.js (skipper), content.css
-Resources/                 Info.plist files, entitlements, app icon
+WebExtension/              manifest.json, main.js (strips ads from responses), content.js (skipper), content.css, _locales/ (name and description per language)
+Resources/                 Info.plist files, entitlements, app icon, Localizations/<code>.json string tables
 filters/custom.txt         your own rules (included in the Ad Blocking list)
 filters/sources/           downloaded source lists (filled by update-rules.sh)
 rules/                     converted Safari rules (JSON) plus meta information (generated at build time, not in the repo)

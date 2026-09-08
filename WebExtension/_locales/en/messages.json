@@ -1,0 +1,8 @@
+{
+  "extName": {
+    "message": "Video Ad Skipper"
+  },
+  "extDesc": {
+    "message": "Keeps video ads from starting on the video site, skips any that still appear, and dismisses ad-blocker warnings."
+  }
+}

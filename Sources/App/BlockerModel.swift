@@ -9,9 +9,7 @@ private let logger = Logger(subsystem: "com.jhunos.SafariAdBlock", category: "bl
 struct BlockerInfo: Identifiable {
     enum Kind { case contentBlocker, webExtension }
     let id: String        // extension bundle identifier
-    let folder: String    // Contents/PlugIns/<folder>.appex
-    let title: String
-    let detail: String
+    let folder: String    // Contents/PlugIns/<folder>.appex; also the key base for its localized name and description
     var kind: Kind = .contentBlocker
 }
 
@@ -46,16 +44,15 @@ final class BlockerModel: ObservableObject {
     static let appID = Bundle.main.bundleIdentifier ?? "com.jhunos.SafariAdBlock"
 
     let blockers: [BlockerInfo] = [
-        BlockerInfo(id: appID + ".Ads", folder: "Ads", title: "Ad Blocking",
-                    detail: "EasyList plus your own rules (filters/custom.txt). Blocks banners, pop-ups and ad scripts, and hides ad placeholders."),
-        BlockerInfo(id: appID + ".Privacy", folder: "Privacy", title: "Tracker Blocking",
-                    detail: "EasyPrivacy. Blocks analytics and tracking scripts and beacons."),
-        BlockerInfo(id: appID + ".Korea", folder: "Korea", title: "Korean Sites Ad Blocking",
-                    detail: "List-KR and YousList. Rules specific to Korean sites such as Naver and Daum."),
-        BlockerInfo(id: appID + ".VideoAdSkip", folder: "VideoAdSkip", title: "Video Ad Skipper",
-                    detail: "Skips pre-roll and mid-roll video ads automatically and dismisses ad-blocker warnings. After enabling it, Safari asks for site access the first time you open the video site; choose ‘Always Allow’.",
-                    kind: .webExtension),
+        BlockerInfo(id: appID + ".Ads", folder: "Ads"),
+        BlockerInfo(id: appID + ".Privacy", folder: "Privacy"),
+        BlockerInfo(id: appID + ".Korea", folder: "Korea"),
+        BlockerInfo(id: appID + ".VideoAdSkip", folder: "VideoAdSkip", kind: .webExtension),
     ]
+
+    /// Set by the view so user-facing messages can be produced in the chosen language.
+    var lang: Lang?
+    private func t(_ key: String, _ args: [String: String] = [:]) -> String { lang?.t(key, args) ?? key }
 
     @Published private(set) var states: [String: BlockerState] = [:]
     @Published private(set) var metas: [String: RuleMeta] = [:]
@@ -111,7 +108,7 @@ final class BlockerModel: ObservableObject {
 
     func reloadAll() {
         busy = true
-        message = "Reloading rules in Safari…"
+        message = t("msg.reloading")
         reloadGeneration += 1
         let generation = reloadGeneration
         let errors = MessageBox()
@@ -121,16 +118,17 @@ final class BlockerModel: ObservableObject {
             Task { @MainActor in
                 guard self.busy, self.reloadGeneration == generation else { return }
                 self.busy = false
-                self.message = "Safari did not respond within 20 seconds. The rules may have been reloaded anyway; reload a page in Safari to check."
+                self.message = self.t("msg.reloadTimeout")
                 logger.error("Rule reload: no response from Safari (20 s)")
                 self.refresh()
             }
         }
         for b in blockers where b.kind == .contentBlocker {
             group.enter()
+            let name = t("ext.\(b.folder).name")
             SFContentBlockerManager.reloadContentBlocker(withIdentifier: b.id) { error in
                 if let error = error {
-                    errors.append("\(b.title): \(error.localizedDescription)")
+                    errors.append("\(name): \(error.localizedDescription)")
                     logger.error("\(b.id, privacy: .public): rule reload failed — \(error.localizedDescription, privacy: .public)")
                 } else {
                     logger.notice("\(b.id, privacy: .public): rules reloaded")
@@ -143,7 +141,7 @@ final class BlockerModel: ObservableObject {
                 guard self.reloadGeneration == generation else { return }
                 self.busy = false
                 let failed = errors.all
-                self.message = failed.isEmpty ? "Rules reloaded." : failed.joined(separator: "\n")
+                self.message = failed.isEmpty ? self.t("msg.reloaded") : failed.joined(separator: "\n")
                 self.refresh()
             }
         }
@@ -154,7 +152,7 @@ final class BlockerModel: ObservableObject {
         SFSafariApplication.showPreferencesForExtension(withIdentifier: id) { error in
             Task { @MainActor in
                 if let error = error {
-                    self.message = "Could not open Safari settings automatically (\(error.localizedDescription)). Enable the extensions in Safari › Settings › Extensions."
+                    self.message = self.t("msg.settingsFailed", ["error": error.localizedDescription])
                     self.openSafari()
                 }
             }
@@ -165,15 +163,15 @@ final class BlockerModel: ObservableObject {
     func openCheckPage() {
         guard let url = URL(string: "https://adblock-tester.com/"),
               let safari = NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.apple.Safari") else {
-            message = "Safari was not found."
+            message = t("msg.safariMissing")
             return
         }
         NSWorkspace.shared.open([url], withApplicationAt: safari, configuration: NSWorkspace.OpenConfiguration()) { _, error in
             Task { @MainActor in
                 if let error = error {
-                    self.message = "Could not open the test site: \(error.localizedDescription)"
+                    self.message = self.t("msg.testFailed", ["error": error.localizedDescription])
                 } else {
-                    self.message = "Opened the test site in Safari. A high score (80 or more) means the rules are active. Both Ad Blocking and Tracker Blocking must be on for a high score."
+                    self.message = self.t("msg.testOpened")
                 }
             }
         }

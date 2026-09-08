@@ -3,10 +3,12 @@ import SwiftUI
 @main
 struct SafariAdBlockApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
+    @StateObject private var lang = Lang()
 
     var body: some Scene {
-        WindowGroup("Safari Ad Blocker") {
+        WindowGroup(lang.t("app.title")) {
             ContentView()
+                .environmentObject(lang)
         }
         .windowResizability(.contentSize)
         .commands {

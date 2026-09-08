@@ -17,16 +17,31 @@ SDK=$(xcrun --show-sdk-path)
 OUT=build
 APP="$OUT/$APP_NAME.app"
 OBJ="$OUT/obj"
+LANGS="en ko ja zh-Hans"             # UI languages; string tables in Resources/App/Localizations/<code>.json
 
-display_name() {
-  case "$1" in
-    Ads) echo "Ad Blocking" ;;
-    Privacy) echo "Tracker Blocking" ;;
-    Korea) echo "Korean Sites Ad Blocking" ;;
-    VideoAdSkip) echo "Video Ad Skipper" ;;
-    *) echo "$1" ;;
-  esac
+# loc <code> <key> — reads one string from a localization table
+loc() {
+  python3 -c 'import json, sys; print(json.load(open(sys.argv[1], encoding="utf-8"))[sys.argv[2]])' \
+    "Resources/App/Localizations/$1.json" "$2"
 }
+# write_display_names <bundle> <key> — localized CFBundleDisplayName via <lang>.lproj/InfoPlist.strings (Safari and Finder use the system language)
+write_display_names() {
+  local bundle=$1 key=$2 lang
+  for lang in $LANGS; do
+    mkdir -p "$bundle/Contents/Resources/$lang.lproj"
+    printf '"CFBundleDisplayName" = "%s";\n' "$(loc "$lang" "$key")" > "$bundle/Contents/Resources/$lang.lproj/InfoPlist.strings"
+  done
+}
+
+display_name() { loc en "ext.$1.name"; }   # English name goes into Info.plist as the fallback
+
+# All localization tables must have the same keys
+python3 - <<'PY'
+import json
+tables = {c: set(json.load(open(f'Resources/App/Localizations/{c}.json', encoding='utf-8'))) for c in "en ko ja zh-Hans".split()}
+missing = {c: sorted(tables['en'] - k) for c, k in tables.items() if k != tables['en']}
+if missing: raise SystemExit(f'localization keys differ from en.json: {missing}')
+PY
 
 for ext in $EXTENSIONS; do
   if [ ! -f "rules/$ext.json" ]; then
@@ -64,6 +79,9 @@ if [ ! -f Resources/App/AppIcon.icns ]; then
   iconutil -c icns "$OBJ/AppIcon.iconset" -o Resources/App/AppIcon.icns
 fi
 cp Resources/App/AppIcon.icns "$APP/Contents/Resources/AppIcon.icns"
+mkdir -p "$APP/Contents/Resources/Localizations"
+cp Resources/App/Localizations/*.json "$APP/Contents/Resources/Localizations/"
+write_display_names "$APP" app.title
 
 for ext in $EXTENSIONS; do
   echo "Building extension: $ext ($(display_name "$ext"))…"
@@ -79,6 +97,7 @@ for ext in $EXTENSIONS; do
       Resources/Extension/Info.plist > "$APPEX/Contents/Info.plist"
   cp "rules/$ext.json" "$APPEX/Contents/Resources/blockerList.json"
   cp "rules/$ext.meta.json" "$APPEX/Contents/Resources/meta.json"
+  write_display_names "$APPEX" "ext.$ext.name"
 done
 
 echo "Building extension: $WEB_EXT ($(display_name "$WEB_EXT"))…"
@@ -93,6 +112,8 @@ sed -e "s/__NAME__/$WEB_EXT/g" -e "s/__BUNDLE_ID__/$BUNDLE_ID/g" \
     -e "s/__POINT__/com.apple.Safari.web-extension/g" -e "s/__PRINCIPAL__/SafariWebExtensionHandler/g" \
     Resources/Extension/Info.plist > "$APPEX/Contents/Info.plist"
 cp WebExtension/manifest.json WebExtension/background.js WebExtension/main.js WebExtension/content.js WebExtension/content.css "$APPEX/Contents/Resources/"
+cp -R WebExtension/_locales "$APPEX/Contents/Resources/_locales"   # manifest name/description per system language
+write_display_names "$APPEX" "ext.$WEB_EXT.name"
 for px in 64 128; do
   sips -s format png -z $px $px Resources/App/AppIcon.icns --out "$APPEX/Contents/Resources/images/icon-$px.png" >/dev/null
 done
