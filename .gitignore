@@ -1,0 +1,7 @@
+build/
+rules/
+filters/sources/
+tools/validate
+tools/smoke-test
+*.iconset
+.DS_Store

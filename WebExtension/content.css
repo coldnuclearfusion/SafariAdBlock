@@ -1,0 +1,15 @@
+/* Hide ad overlays, banners and notices on the watch page (the video ads themselves are handled by main.js and content.js) */
+.ytp-ad-overlay-container,
+.ytp-ad-text-overlay,
+.ytp-ad-image-overlay,
+.ytp-ad-message-container,
+.ytp-ad-action-interstitial,
+.ytp-ad-player-overlay-layout,
+.video-ads.ytp-ad-module,
+#player-ads,
+ytd-action-companion-ad-renderer,
+ytd-player-legacy-desktop-watch-ads-renderer,
+ytd-ad-slot-renderer,
+ytd-enforcement-message-view-model {
+  display: none !important;
+}

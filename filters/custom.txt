@@ -1,0 +1,41 @@
+! Your own rules — EasyList (ABP) syntax. Always included in the "Ad Blocking" list.
+! Run ./update-rules.sh to apply changes.
+!
+! Syntax examples:
+!   ||example.com^                 block every request to example.com and its subdomains
+!   ||example.com^$third-party     block it only when embedded in other sites (third-party)
+!   example.com##.banner           hide .banner elements on example.com
+!   ##.sponsored-box               hide .sponsored-box elements on every site
+!   @@||example.com^$document      never block anything on example.com (site exception)
+!   @@||cdn.example.com/lib.js     do not block one specific file
+!
+! Korean ad networks (blocked only when embedded in other sites)
+||mobon.net^$third-party
+||dable.io^$third-party
+||adop.cc^$third-party
+||tenping.kr^$third-party
+||adpnut.com^$third-party
+
+! Ad cards and banners on the video site's home, feed, search and watch pages (broader than the EasyList rules)
+! Note: pre-roll and mid-roll video ads come from the same servers in the same way as the video itself,
+! so a Safari content blocker cannot block them. The Video Ad Skipper extension handles those.
+youtube.com###masthead-ad
+youtube.com##ytd-ad-slot-renderer
+youtube.com##ytd-rich-item-renderer:has(ytd-ad-slot-renderer)
+youtube.com##ytd-rich-section-renderer:has(ytd-ad-slot-renderer)
+youtube.com##ytd-in-feed-ad-layout-renderer
+youtube.com##ytd-display-ad-renderer
+youtube.com##ytd-promoted-video-renderer
+youtube.com##ytd-compact-promoted-video-renderer
+youtube.com##ytd-promoted-sparkles-web-renderer
+youtube.com##ytd-video-masthead-ad-v3-renderer
+youtube.com##ytd-banner-promo-renderer
+youtube.com##ytd-primetime-promo-renderer
+youtube.com##ytd-mealbar-promo-renderer
+youtube.com##ytd-merch-shelf-renderer
+youtube.com##ytd-action-companion-ad-renderer
+youtube.com##ytd-player-legacy-desktop-watch-ads-renderer
+youtube.com##ytd-engagement-panel-section-list-renderer[target-id="engagement-panel-ads"]
+youtube.com##ytd-search-pyv-renderer
+youtube.com##.ytp-ad-overlay-container
+youtube.com##.ytp-ad-text-overlay
