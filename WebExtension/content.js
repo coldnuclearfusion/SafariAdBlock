@@ -88,9 +88,8 @@
     scheduleResume(video);
   }
 
-  // YouTube means to autoplay the main video after an ad. If it is still paused, resume it: check every 400 ms
-  // for three seconds after the ad ended, at most three attempts, and only while the video is near its start of
-  // playback so a deliberate pause later is left alone.
+  // YouTube means to keep playing after an ad or after its warning dialog. If the video is paused instead, resume it:
+  // check every 250 ms for five seconds, at most four attempts. A deliberate pause by the user after that is left alone.
   function scheduleResume(video) {
     clearInterval(resumeTimer);
     let checks = 0;
@@ -99,17 +98,17 @@
       checks += 1;
       const p = player();
       const adShowing = p && p.classList.contains('ad-showing');
-      if (checks > 8 || attempts >= 3 || !document.contains(video)) { clearInterval(resumeTimer); return; }
+      if (checks > 20 || attempts >= 4 || !document.contains(video)) { clearInterval(resumeTimer); return; }
       if (adShowing || !video.paused || video.ended) return;
       attempts += 1;
-      diag('main video is paused after the ad; resuming (attempt ' + attempts + ')');
+      diag('video is paused after an ad or a dialog; resuming (attempt ' + attempts + ')');
       video.play().catch((e) => {
         diag('play() was rejected: ' + (e && e.name) + ' — ' + (e && e.message));
         // Fall back to the player's own play button, which goes through YouTube's code path.
         const button = p && p.querySelector('.ytp-play-button, .ytp-large-play-button');
         if (button && video.paused) button.click();
       });
-    }, 400);
+    }, 250);
   }
 
   // Dismiss the ad-blocker detection warning and resume playback
@@ -120,7 +119,7 @@
     const dialog = message.closest('tp-yt-paper-dialog');
     if (dialog) dialog.remove();
     document.querySelectorAll('tp-yt-iron-overlay-backdrop').forEach((b) => b.remove());
-    if (video && video.paused) video.play().catch(() => {});
+    if (video) scheduleResume(video);   // YouTube pauses the video ~30 ms after the dialog appears; keep checking
   }
 
   // A freshly opened watch page is meant to start playing on its own. If the video has media ready but sits paused at
@@ -173,6 +172,24 @@
     clickAny(p, CLOSE_BUTTONS);
     dismissEnforcement(video);
   }
+
+  // Remove the ad-blocker warning the moment it is inserted, before YouTube's open-popup handler pauses the video, and
+  // keep the video playing. The periodic tick also catches it in case the insertion is missed.
+  const dialogObserver = new MutationObserver((mutations) => {
+    for (const m of mutations) {
+      for (const node of m.addedNodes) {
+        if (node.nodeType !== 1) continue;
+        const hit = node.matches && node.matches('ytd-enforcement-message-view-model') ? node : node.querySelector && node.querySelector('ytd-enforcement-message-view-model');
+        if (!hit) continue;
+        const p = player();
+        const video = p && (p.querySelector('video.html5-main-video') || p.querySelector('video'));
+        diag('ad-blocker warning inserted; removing immediately');
+        dismissEnforcement(video);
+        return;
+      }
+    }
+  });
+  if (document.documentElement) dialogObserver.observe(document.documentElement, { childList: true, subtree: true });
 
   // React to player class changes immediately; the periodic check follows player replacement during in-page navigation
   const observer = new MutationObserver(tick);

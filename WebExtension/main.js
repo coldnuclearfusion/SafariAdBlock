@@ -15,12 +15,27 @@
   const AD_KEYS = ['adPlacements', 'adSlots', 'playerAds'];
   const PLAYER_PATH = '/youtubei/v1/player';
 
+  // Also drop the ad-blocker warning that YouTube attaches to the player response under
+  // auxiliaryUi.messageRenderers (key names vary, e.g. bkaEnforcementMessageViewModel): with it gone, YouTube neither
+  // shows the dialog nor pauses the video.
+  function stripOne(obj) {
+    if (!obj || typeof obj !== 'object') return;
+    for (const key of AD_KEYS) if (key in obj) obj[key] = [];
+    const renderers = obj.auxiliaryUi && obj.auxiliaryUi.messageRenderers;
+    if (renderers && typeof renderers === 'object') {
+      for (const key of Object.keys(renderers)) if (/enforcementmessage/i.test(key)) delete renderers[key];
+    }
+  }
   function strip(obj) {
     if (obj && typeof obj === 'object') {
-      for (const key of AD_KEYS) if (key in obj) obj[key] = [];
+      stripOne(obj);
+      if (obj.playerResponse) stripOne(obj.playerResponse);   // some responses wrap it
     }
     return obj;
   }
+  const looksLikePlayerResponse = (obj) => obj && typeof obj === 'object' &&
+    ('adPlacements' in obj || 'adSlots' in obj || 'playerAds' in obj || 'auxiliaryUi' in obj ||
+     (obj.playerResponse && typeof obj.playerResponse === 'object' && ('adPlacements' in obj.playerResponse || 'adSlots' in obj.playerResponse)));
 
   function stripText(text) {
     if (typeof text !== 'string' || !AD_KEYS.some((k) => text.includes('"' + k + '"'))) return text;
@@ -58,7 +73,19 @@
     }
   };
 
-  // 3) Responses received through XMLHttpRequest (legacy path)
+  // 3) Whatever path the data takes (worker, XHR, fetch), YouTube parses it with JSON.parse on the main thread
+  const originalParse = JSON.parse;
+  JSON.parse = function (text, reviver) {
+    const value = originalParse.call(JSON, text, reviver);
+    try { if (looksLikePlayerResponse(value)) strip(value); } catch (e) {}
+    return value;
+  };
+  const originalJson = Response.prototype.json;
+  Response.prototype.json = function () {
+    return originalJson.apply(this, arguments).then((value) => { try { if (looksLikePlayerResponse(value)) strip(value); } catch (e) {} return value; });
+  };
+
+  // 4) Responses received through XMLHttpRequest (legacy path)
   const originalOpen = XMLHttpRequest.prototype.open;
   XMLHttpRequest.prototype.open = function (method, url, ...rest) {
     this.__sabPlayer = isPlayerRequest(url);
