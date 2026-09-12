@@ -28,6 +28,32 @@
 
   let saved = null;            // user's playback rate before the ad
   let resumeTimer = null;      // interval that checks the main video actually resumes after an ad
+  let startupTimer = null;     // interval that checks a freshly opened video actually starts
+  let lastWatchURL = '';       // last watch page URL for which the startup check ran
+  const watched = new WeakSet(); // video elements whose pause/play events are being logged
+
+  // Diagnostics: the last 40 lines go to the console and into data-sab-log on <html>, where they can be read from
+  // the page's main world (for example via Safari's "Allow JavaScript from Apple Events").
+  const diagLines = [];
+  function diag(msg) {
+    diagLines.push(new Date().toISOString().slice(11, 23) + ' ' + msg);
+    if (diagLines.length > 40) diagLines.shift();
+    console.info('[SafariAdBlock] ' + msg);
+    try { document.documentElement.dataset.sabLog = JSON.stringify(diagLines); } catch (e) {}
+  }
+  const playerClasses = (p) => Array.from(p.classList).filter((c) => /mode|ad-|ended/.test(c)).join(' ');
+  const openDialogs = () => document.querySelectorAll('tp-yt-paper-dialog:not([aria-hidden="true"]), ytd-enforcement-message-view-model').length;
+
+  function watchVideo(p, video) {
+    if (watched.has(video)) return;
+    watched.add(video);
+    for (const type of ['pause', 'play', 'ended']) {
+      video.addEventListener(type, () => {
+        diag(type + ' event at t=' + video.currentTime.toFixed(1) + ', rate=' + video.playbackRate + ', muted=' + video.muted +
+             ', dialogs=' + openDialogs() + ', player=[' + playerClasses(p) + ']');
+      });
+    }
+  }
   let contentDuration = NaN;   // main video duration seen just before the ad
   let adTicks = 0;             // consecutive ticks in which the ad state was observed
   let observed = null;         // the player the MutationObserver is watching
@@ -76,9 +102,9 @@
       if (checks > 8 || attempts >= 3 || !document.contains(video)) { clearInterval(resumeTimer); return; }
       if (adShowing || !video.paused || video.ended) return;
       attempts += 1;
-      console.info('[SafariAdBlock] main video is paused after the ad; resuming (attempt ' + attempts + ')');
+      diag('main video is paused after the ad; resuming (attempt ' + attempts + ')');
       video.play().catch((e) => {
-        console.warn('[SafariAdBlock] play() was rejected: ' + (e && e.name) + ' — ' + (e && e.message));
+        diag('play() was rejected: ' + (e && e.name) + ' — ' + (e && e.message));
         // Fall back to the player's own play button, which goes through YouTube's code path.
         const button = p && p.querySelector('.ytp-play-button, .ytp-large-play-button');
         if (button && video.paused) button.click();
@@ -90,26 +116,55 @@
   function dismissEnforcement(video) {
     const message = document.querySelector('ytd-enforcement-message-view-model');
     if (!message) return;
+    diag('ad-blocker warning dialog found; dismissing');
     const dialog = message.closest('tp-yt-paper-dialog');
     if (dialog) dialog.remove();
     document.querySelectorAll('tp-yt-iron-overlay-backdrop').forEach((b) => b.remove());
     if (video && video.paused) video.play().catch(() => {});
   }
 
+  // A freshly opened watch page is meant to start playing on its own. If the video has media ready but sits paused at
+  // the start for a while (no ad involved), start it: check every 400 ms for six seconds after navigation, at most two
+  // attempts, top frame only, and never while the tab is hidden. Whatever paused it (an anti-ad-blocker nudge, a
+  // playback policy) is reported in the console.
+  function startupCheck() {
+    if (window !== window.top || !location.pathname.startsWith('/watch')) return;
+    if (location.href === lastWatchURL) return;
+    lastWatchURL = location.href;
+    clearInterval(startupTimer);
+    let checks = 0;
+    let attempts = 0;
+    startupTimer = setInterval(() => {
+      checks += 1;
+      const p = player();
+      const video = p && (p.querySelector('video.html5-main-video') || p.querySelector('video'));
+      if (checks > 15 || attempts >= 2 || document.hidden) { if (checks > 15 || attempts >= 2) clearInterval(startupTimer); return; }
+      if (!video || video.readyState < 2 || !video.paused || video.ended || video.currentTime > 1) return;
+      if (p.classList.contains('ad-showing')) return;
+      attempts += 1;
+      diag('video is paused at the start of ' + location.pathname + location.search + '; starting it (attempt ' + attempts + '), player=[' + playerClasses(p) + '], dialogs=' + openDialogs());
+      video.play().catch((e) => diag('play() was rejected: ' + (e && e.name) + ' — ' + (e && e.message)));
+    }, 400);
+  }
+
   function tick() {
+    startupCheck();
     const p = player();
     if (!p) return;
     if (!reported && document.body) {
       reported = true;
-      console.info('[SafariAdBlock] Video Ad Skipper active. Main-world script:', document.documentElement.dataset.sabMain === '1' ? 'running' : 'not running');
+      diag('Video Ad Skipper active. Main-world script: ' + (document.documentElement.dataset.sabMain === '1' ? 'running' : 'not running'));
     }
     const video = p.querySelector('video.html5-main-video') || p.querySelector('video');
     const adShowing = p.classList.contains('ad-showing');
     if (video) {
+      watchVideo(p, video);
       if (adShowing) {
         adTicks += 1;
+        if (adTicks === 1) diag('ad started (duration=' + video.duration + ', contentDuration=' + contentDuration + ')');
         skipAd(p, video);
       } else {
+        if (adTicks > 0) diag('ad ended (video paused=' + video.paused + ', t=' + video.currentTime.toFixed(1) + ')');
         adTicks = 0;
         if (finite(video.duration)) contentDuration = video.duration;
         restore(video);

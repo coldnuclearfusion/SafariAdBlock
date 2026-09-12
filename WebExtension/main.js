@@ -10,12 +10,14 @@
   // Leave a marker in the DOM so content.js (isolated world) can tell whether this script is active
   document.documentElement.dataset.sabMain = '1';
 
-  const AD_KEYS = ['adPlacements', 'adSlots', 'playerAds', 'adBreakHeartbeatParams'];
+  // Ad entries are emptied rather than deleted: the player expects these keys to exist as arrays, and deleting them
+  // can break player initialization when YouTube ships a new player build.
+  const AD_KEYS = ['adPlacements', 'adSlots', 'playerAds'];
   const PLAYER_PATH = '/youtubei/v1/player';
 
   function strip(obj) {
     if (obj && typeof obj === 'object') {
-      for (const key of AD_KEYS) if (key in obj) delete obj[key];
+      for (const key of AD_KEYS) if (key in obj) obj[key] = [];
     }
     return obj;
   }
