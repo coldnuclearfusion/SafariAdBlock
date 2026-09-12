@@ -27,7 +27,7 @@
   const AD_RATE = 16;
 
   let saved = null;            // user's playback rate before the ad
-  let resumeTimer = null;      // one-shot check that the main video actually resumes after an ad
+  let resumeTimer = null;      // interval that checks the main video actually resumes after an ad
   let contentDuration = NaN;   // main video duration seen just before the ad
   let adTicks = 0;             // consecutive ticks in which the ad state was observed
   let observed = null;         // the player the MutationObserver is watching
@@ -59,14 +59,31 @@
     if (saved === null) return;
     video.playbackRate = saved;
     saved = null;
-    // If the main video is still paused shortly after the ad ended, resume it once (YouTube meant to autoplay it).
-    clearTimeout(resumeTimer);
-    resumeTimer = setTimeout(() => {
-      if (video.paused && !video.ended && !player()?.classList.contains('ad-showing')) {
-        console.info('[SafariAdBlock] main video did not resume after the ad; resuming');
-        video.play().catch(() => {});
-      }
-    }, 800);
+    scheduleResume(video);
+  }
+
+  // YouTube means to autoplay the main video after an ad. If it is still paused, resume it: check every 400 ms
+  // for three seconds after the ad ended, at most three attempts, and only while the video is near its start of
+  // playback so a deliberate pause later is left alone.
+  function scheduleResume(video) {
+    clearInterval(resumeTimer);
+    let checks = 0;
+    let attempts = 0;
+    resumeTimer = setInterval(() => {
+      checks += 1;
+      const p = player();
+      const adShowing = p && p.classList.contains('ad-showing');
+      if (checks > 8 || attempts >= 3 || !document.contains(video)) { clearInterval(resumeTimer); return; }
+      if (adShowing || !video.paused || video.ended) return;
+      attempts += 1;
+      console.info('[SafariAdBlock] main video is paused after the ad; resuming (attempt ' + attempts + ')');
+      video.play().catch((e) => {
+        console.warn('[SafariAdBlock] play() was rejected: ' + (e && e.name) + ' — ' + (e && e.message));
+        // Fall back to the player's own play button, which goes through YouTube's code path.
+        const button = p && p.querySelector('.ytp-play-button, .ytp-large-play-button');
+        if (button && video.paused) button.click();
+      });
+    }, 400);
   }
 
   // Dismiss the ad-blocker detection warning and resume playback
