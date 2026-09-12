@@ -15,16 +15,11 @@
   const AD_KEYS = ['adPlacements', 'adSlots', 'playerAds'];
   const PLAYER_PATH = '/youtubei/v1/player';
 
-  // Also drop the ad-blocker warning that YouTube attaches to the player response under
-  // auxiliaryUi.messageRenderers (key names vary, e.g. bkaEnforcementMessageViewModel): with it gone, YouTube neither
-  // shows the dialog nor pauses the video.
+  // The ad-blocker warning that YouTube attaches under auxiliaryUi.messageRenderers is deliberately left alone:
+  // removing it makes the player show a generic "Something went wrong" error instead. content.js handles the dialog.
   function stripOne(obj) {
     if (!obj || typeof obj !== 'object') return;
     for (const key of AD_KEYS) if (key in obj) obj[key] = [];
-    const renderers = obj.auxiliaryUi && obj.auxiliaryUi.messageRenderers;
-    if (renderers && typeof renderers === 'object') {
-      for (const key of Object.keys(renderers)) if (/enforcementmessage/i.test(key)) delete renderers[key];
-    }
   }
   function strip(obj) {
     if (obj && typeof obj === 'object') {
