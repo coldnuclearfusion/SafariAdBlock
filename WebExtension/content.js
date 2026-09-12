@@ -1,5 +1,7 @@
 // Video Ad Skipper — runs inside the video site's pages (isolated world). Fallback for ads that main.js did not filter out.
-// How it works: while the player is in the ad state (.ad-showing), click the skip button and play the ad muted at 16x.
+// How it works: while the player is in the ad state (.ad-showing), click the skip button and play the ad at 16x.
+// The ad is deliberately NOT muted: unmuting by script afterwards makes Safari pause the main video (WebKit's autoplay
+// policy), and YouTube would also persist the muted state as the user's setting.
 // Seeking to the end of the ad video happens only when ALL of the following hold, because otherwise the main video could be skipped:
 //   - ad UI (overlay, remaining time, etc.) is actually visible,
 //   - the video element's duration differs from the main video duration recorded just before the ad
@@ -24,7 +26,8 @@
   const CLOSE_BUTTONS = ['.ytp-ad-overlay-close-button'];
   const AD_RATE = 16;
 
-  let saved = null;            // user's state before the ad { muted, rate }
+  let saved = null;            // user's playback rate before the ad
+  let resumeTimer = null;      // one-shot check that the main video actually resumes after an ad
   let contentDuration = NaN;   // main video duration seen just before the ad
   let adTicks = 0;             // consecutive ticks in which the ad state was observed
   let observed = null;         // the player the MutationObserver is watching
@@ -41,9 +44,8 @@
   }
 
   function skipAd(p, video) {
-    if (!saved) saved = { muted: video.muted, rate: video.playbackRate };
+    if (saved === null) saved = video.playbackRate;
     clickAny(p, SKIP_BUTTONS);
-    video.muted = true;
     if (video.playbackRate !== AD_RATE) video.playbackRate = AD_RATE;
 
     const adUIVisible = AD_UI.some((sel) => p.querySelector(sel));
@@ -54,10 +56,17 @@
   }
 
   function restore(video) {
-    if (!saved) return;
-    video.muted = saved.muted;
-    video.playbackRate = saved.rate;
+    if (saved === null) return;
+    video.playbackRate = saved;
     saved = null;
+    // If the main video is still paused shortly after the ad ended, resume it once (YouTube meant to autoplay it).
+    clearTimeout(resumeTimer);
+    resumeTimer = setTimeout(() => {
+      if (video.paused && !video.ended && !player()?.classList.contains('ad-showing')) {
+        console.info('[SafariAdBlock] main video did not resume after the ad; resuming');
+        video.play().catch(() => {});
+      }
+    }, 800);
   }
 
   // Dismiss the ad-blocker detection warning and resume playback
